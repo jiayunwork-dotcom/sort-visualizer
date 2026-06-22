@@ -1,0 +1,193 @@
+<div class="app-container">
+  <!-- Top Header Bar -->
+  <header class="header">
+    <h1>排序算法交互式可视化教学工具</h1>
+    <div class="mode-toggle">
+      <button [class.active]="!isDualMode" (click)="setDualMode(false)">单算法模式</button>
+      <button [class.active]="isDualMode" (click)="setDualMode(true)">双算法对比</button>
+    </div>
+  </header>
+
+  <!-- Control Bar -->
+  <div class="controls">
+    <div class="control-group">
+      <label>算法选择</label>
+      <select [(ngModel)]="selectedAlgorithmId" (ngModelChange)="onAlgorithmChange()">
+        <option *ngFor="let algo of algorithms" [value]="algo.id">{{algo.nameCn}} ({{algo.name}})</option>
+      </select>
+    </div>
+
+    <div class="control-group">
+      <label>数组长度: {{arrayLength}}</label>
+      <input type="range" min="10" max="200" [(ngModel)]="arrayLength" (ngModelChange)="onDataChange()">
+    </div>
+
+    <div class="control-group">
+      <label>数据分布</label>
+      <select [(ngModel)]="distribution" (ngModelChange)="onDataChange()">
+        <option value="random">完全随机</option>
+        <option value="nearly-sorted">近乎有序</option>
+        <option value="reversed">完全逆序</option>
+        <option value="duplicates">大量重复值</option>
+        <option value="custom">自定义输入</option>
+      </select>
+    </div>
+
+    <div class="control-group" *ngIf="distribution === 'custom'">
+      <input type="text" [(ngModel)]="customInput" placeholder="输入逗号分隔的数字" (ngModelChange)="onDataChange()" class="custom-input">
+    </div>
+
+    <div class="control-group">
+      <label>
+        <input type="checkbox" [(ngModel)]="isStabilityMode" (ngModelChange)="onStabilityModeChange()">
+        稳定性演示
+      </label>
+    </div>
+  </div>
+
+  <!-- Playback Controls -->
+  <div class="playback">
+    <button (click)="reset()" title="重置">⏹</button>
+    <button (click)="stepBack()" title="单步后退">⏮</button>
+    <button (click)="togglePlay()" class="play-btn" [title]="isPlaying ? '暂停' : '播放'">
+      {{isPlaying ? '⏸' : '▶'}}
+    </button>
+    <button (click)="stepForward()" title="单步前进">⏭</button>
+
+    <div class="speed-control">
+      <label>慢</label>
+      <input type="range" min="10" max="2000" [(ngModel)]="speedSliderValue" (ngModelChange)="onSpeedChange()">
+      <label>快</label>
+      <span>{{speed >= 1000 ? (speed/1000).toFixed(1) + 's/步' : speed + 'ms/步'}}</span>
+    </div>
+
+    <div class="progress-control">
+      <input type="range" min="0" [max]="totalSteps" [value]="currentStepIndex" (input)="onProgressChange($event)">
+      <span>步骤 {{currentStepIndex}} / {{totalSteps}}</span>
+    </div>
+
+    <button (click)="isCodePanelOpen = !isCodePanelOpen" [class.active]="isCodePanelOpen">📋 伪代码</button>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main-content" [class.code-open]="isCodePanelOpen">
+    <!-- Visualization Panels -->
+    <div class="viz-container">
+      <!-- First Algorithm Panel -->
+      <div class="viz-panel" [class.dual]="isDualMode">
+        <div class="viz-header">
+          <span class="algo-name">{{getAlgorithmInfo(selectedAlgorithmId)?.nameCn}}</span>
+          <span class="algo-desc" *ngIf="!isDualMode">{{getAlgorithmInfo(selectedAlgorithmId)?.description}}</span>
+          <div class="stats">
+            <span class="stat">比较: <strong>{{currentComparisons}}</strong></span>
+            <span class="stat">交换: <strong>{{currentSwaps}}</strong></span>
+            <span class="stat complete" *ngIf="firstIsComplete">✓ 已完成</span>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas #barCanvas></canvas>
+        </div>
+        <div class="heap-wrapper" *ngIf="selectedAlgorithmId === 'heap'">
+          <canvas #heapCanvas></canvas>
+        </div>
+      </div>
+
+      <!-- Second Algorithm Panel (Dual Mode) -->
+      <div class="viz-panel dual" *ngIf="isDualMode">
+        <div class="viz-header">
+          <select [(ngModel)]="secondAlgorithmId" (ngModelChange)="onSecondAlgorithmChange()" class="algo-select-sm">
+            <option *ngFor="let algo of algorithms" [value]="algo.id">{{algo.nameCn}}</option>
+          </select>
+          <div class="stats">
+            <span class="stat">比较: <strong>{{secondComparisons}}</strong></span>
+            <span class="stat">交换: <strong>{{secondSwaps}}</strong></span>
+            <span class="stat complete" *ngIf="secondIsComplete">✓ 已完成</span>
+          </div>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas #barCanvas2></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code Panel (Right Sidebar) -->
+    <div class="code-panel" *ngIf="isCodePanelOpen">
+      <h3>{{getAlgorithmInfo(selectedAlgorithmId)?.nameCn}} 伪代码</h3>
+      <div class="pseudocode">
+        <div *ngFor="let line of getAlgorithmInfo(selectedAlgorithmId)?.pseudocode; let i = index"
+             [class.highlighted]="i === currentCodeLine" class="code-line">
+          <span class="line-num">{{i + 1}}</span>
+          <span class="line-text">{{line}}</span>
+        </div>
+      </div>
+      <div class="variables" *ngIf="currentVariables && (currentVariables | keyvalue).length > 0">
+        <h4>变量状态</h4>
+        <div *ngFor="let v of currentVariables | keyvalue" class="var-row">
+          <span class="var-name">{{v.key}}</span> = <span class="var-value">{{v.value}}</span>
+        </div>
+      </div>
+      <div class="algo-info" *ngIf="getAlgorithmInfo(selectedAlgorithmId) as info">
+        <h4>算法说明</h4>
+        <p>{{info.description}}</p>
+        <p><strong>适用场景:</strong> {{info.applicableScenario}}</p>
+        <p><strong>稳定性:</strong> {{info.stable ? '稳定 ✓' : '不稳定 ✗'}}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stability Result -->
+  <div class="stability-result" *ngIf="isStabilityMode && (firstIsComplete || isComplete)">
+    <h3>🔄 稳定性分析结果</h3>
+    <div class="stability-badge" [class.stable]="isStableResult" [class.unstable]="!isStableResult">
+      {{isStableResult ? '✓ 稳定排序 - 相同值的相对顺序保持不变' : '✗ 不稳定排序 - 相同值的相对顺序发生了改变'}}
+    </div>
+    <p class="stability-explanation">{{stabilityExplanation}}</p>
+  </div>
+
+  <!-- Complexity Panel -->
+  <div class="complexity-panel">
+    <h3>📊 算法复杂度对比</h3>
+    <div class="complexity-table-wrapper">
+      <table class="complexity-table">
+        <thead>
+          <tr>
+            <th>算法</th>
+            <th>最好时间</th>
+            <th>平均时间</th>
+            <th>最坏时间</th>
+            <th>空间复杂度</th>
+            <th>稳定性</th>
+            <th *ngIf="isRunning">实际/理论</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let algo of algorithms" [class.active-algo]="algo.id === selectedAlgorithmId || (isDualMode && algo.id === secondAlgorithmId)">
+            <td class="algo-cell">{{algo.nameCn}}</td>
+            <td>{{algo.bestTime}}</td>
+            <td>{{algo.avgTime}}</td>
+            <td>{{algo.worstTime}}</td>
+            <td>{{algo.space}}</td>
+            <td [class.stable]="algo.stable" [class.unstable]="!algo.stable">{{algo.stable ? '✓' : '✗'}}</td>
+            <td *ngIf="isRunning && (algo.id === selectedAlgorithmId || (isDualMode && algo.id === secondAlgorithmId))">
+              {{actualToTheoreticalRatio}}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chart-section">
+      <h4>操作次数增长趋势对比</h4>
+      <div class="chart-legend">
+        <label *ngFor="let algo of algorithms; let i = index" class="legend-item">
+          <input type="checkbox" [checked]="selectedChartAlgorithms.has(algo.id)" (change)="toggleChartAlgorithm(algo.id)">
+          <span class="legend-color" [style.background-color]="getChartColor(i)"></span>
+          {{algo.nameCn}}
+        </label>
+      </div>
+      <div class="chart-canvas-wrapper">
+        <canvas #chartCanvas></canvas>
+      </div>
+    </div>
+  </div>
+</div>
