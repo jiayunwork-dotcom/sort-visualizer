@@ -15,6 +15,11 @@ import {
   SortStep,
   StepType,
   DataDistribution,
+  ThemeId,
+  ThemeColors,
+  THEMES,
+  HistoryRecord,
+  DISTRIBUTION_LABELS,
 } from './models/sort-models';
 import { SortAlgorithmsService } from './services/sort-algorithms.service';
 import { DataGenerationService } from './services/data-generation.service';
@@ -56,12 +61,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   private destroy$ = false;
   private swapAnimationFrame = 0;
 
+  historyRecords: HistoryRecord[] = [];
+  isHistoryPanelOpen = false;
+  readonly HISTORY_MAX = 20;
+  readonly THEMES = THEMES;
+  private readonly HISTORY_STORAGE_KEY = 'sort_visualizer_history';
+  private readonly THEME_STORAGE_KEY = 'sort_visualizer_theme';
+
+  currentThemeId: ThemeId = 'dark';
+  themes: ThemeId[] = ['dark', 'light', 'high-contrast'];
+
   @ViewChild('barCanvas') barCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('barCanvas2') barCanvas2!: ElementRef<HTMLCanvasElement>;
   @ViewChild('heapCanvas') heapCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
 
   private currentArray: number[] = [];
+
+  get currentTheme(): ThemeColors {
+    return THEMES[this.currentThemeId];
+  }
 
   get totalSteps(): number {
     return this.steps.length > 0 ? this.steps.length - 1 : 0;
@@ -141,6 +160,34 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     return '';
   }
 
+  get secondActualToTheoreticalRatio(): string {
+    if (!this.isDualMode || this.secondSteps.length === 0) return '';
+    const lastStep = this.secondSteps[this.secondSteps.length - 1];
+    const n = lastStep.array.length;
+    if (n <= 1) return '';
+    const info = this.getAlgorithmInfo(this.secondAlgorithmId);
+    if (!info) return '';
+    const actualOps = lastStep.comparisons + lastStep.swaps;
+    const nlogn = n * Math.log2(n);
+    if (info.avgTime === 'O(n²)') {
+      const ratio = (actualOps / (n * n)).toFixed(3);
+      return `实际操作/n² = ${ratio}`;
+    }
+    if (info.avgTime.includes('log')) {
+      const ratio = (actualOps / nlogn).toFixed(3);
+      return `实际操作/n·log(n) = ${ratio}`;
+    }
+    if (info.avgTime === 'O(n+k)' || info.avgTime === 'O(d(n+k))') {
+      const ratio = (actualOps / n).toFixed(3);
+      return `实际操作/n = ${ratio}`;
+    }
+    return '';
+  }
+
+  get historyBadgeCount(): number {
+    return this.historyRecords.length;
+  }
+
   constructor(
     private sortService: SortAlgorithmsService,
     private dataService: DataGenerationService,
@@ -148,6 +195,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   ) {}
 
   ngOnInit(): void {
+    this.loadTheme();
+    this.loadHistory();
     this.generateData();
   }
 
@@ -162,6 +211,200 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   ngAfterViewInit(): void {
     this.renderAll();
     this.startRenderLoop();
+  }
+
+  private loadTheme(): void {
+    try {
+      const saved = localStorage.getItem(this.THEME_STORAGE_KEY);
+      if (saved && (saved === 'dark' || saved === 'light' || saved === 'high-contrast')) {
+        this.currentThemeId = saved as ThemeId;
+      }
+    } catch (e) {
+      console.warn('Failed to load theme from localStorage', e);
+    }
+  }
+
+  switchTheme(themeId: ThemeId): void {
+    this.currentThemeId = themeId;
+    try {
+      localStorage.setItem(this.THEME_STORAGE_KEY, themeId);
+    } catch (e) {
+      console.warn('Failed to save theme to localStorage', e);
+    }
+    this.renderAll();
+  }
+
+  private loadHistory(): void {
+    try {
+      const saved = localStorage.getItem(this.HISTORY_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          this.historyRecords = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load history from localStorage', e);
+    }
+  }
+
+  private saveHistoryToStorage(): void {
+    try {
+      localStorage.setItem(this.HISTORY_STORAGE_KEY, JSON.stringify(this.historyRecords));
+    } catch (e) {
+      console.warn('Failed to save history to localStorage', e);
+    }
+  }
+
+  private saveHistoryRecord(): void {
+    if (this.steps.length === 0) return;
+    const lastStep = this.steps[this.steps.length - 1];
+    const firstInfo = this.getAlgorithmInfo(this.selectedAlgorithmId);
+    if (!firstInfo) return;
+
+    const record: HistoryRecord = {
+      id: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      timestamp: Date.now(),
+      algorithmId: this.selectedAlgorithmId,
+      algorithmNameCn: firstInfo.nameCn,
+      arrayLength: this.currentArray.length,
+      distribution: this.distribution,
+      distributionLabel: DISTRIBUTION_LABELS[this.distribution],
+      totalComparisons: lastStep.comparisons,
+      totalSwaps: lastStep.swaps,
+      totalSteps: Math.max(0, this.steps.length - 1),
+      originalArray: [...this.currentArray],
+      isDualMode: this.isDualMode,
+    };
+
+    if (this.isDualMode && this.secondSteps.length > 0) {
+      const secondLastStep = this.secondSteps[this.secondSteps.length - 1];
+      const secondInfo = this.getAlgorithmInfo(this.secondAlgorithmId);
+      if (secondInfo) {
+        record.secondAlgorithmId = this.secondAlgorithmId;
+        record.secondAlgorithmNameCn = secondInfo.nameCn;
+        record.secondTotalComparisons = secondLastStep.comparisons;
+        record.secondTotalSwaps = secondLastStep.swaps;
+        record.secondTotalSteps = Math.max(0, this.secondSteps.length - 1);
+      }
+    }
+
+    this.historyRecords.unshift(record);
+    if (this.historyRecords.length > this.HISTORY_MAX) {
+      this.historyRecords = this.historyRecords.slice(0, this.HISTORY_MAX);
+    }
+    this.saveHistoryToStorage();
+  }
+
+  restoreHistoryRecord(record: HistoryRecord): void {
+    this.pause();
+    this.isHistoryPanelOpen = false;
+    this.isDualMode = record.isDualMode;
+    this.selectedAlgorithmId = record.algorithmId;
+    if (record.secondAlgorithmId) {
+      this.secondAlgorithmId = record.secondAlgorithmId;
+    }
+    this.arrayLength = record.arrayLength;
+    this.distribution = record.distribution;
+    if (record.distribution === 'custom') {
+      this.customInput = record.originalArray.join(', ');
+    }
+    this.currentArray = [...record.originalArray];
+    this.isStabilityMode = false;
+    this.stabilityTags = new Map();
+    this.originalTagOrder = new Map();
+    this.initSteps();
+  }
+
+  clearHistory(): void {
+    this.historyRecords = [];
+    try {
+      localStorage.removeItem(this.HISTORY_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to clear history from localStorage', e);
+    }
+  }
+
+  deleteHistoryRecord(id: string, event: Event): void {
+    event.stopPropagation();
+    this.historyRecords = this.historyRecords.filter(r => r.id !== id);
+    this.saveHistoryToStorage();
+  }
+
+  formatHistoryTime(timestamp: number): string {
+    const d = new Date(timestamp);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  exportReport(): void {
+    const lines: string[] = [];
+    const now = new Date();
+    lines.push('========================================');
+    lines.push('       排序算法执行统计报告');
+    lines.push('========================================');
+    lines.push('');
+    lines.push(`生成时间: ${now.toLocaleString()}`);
+    lines.push(`时间戳: ${now.getTime()}`);
+    lines.push('');
+
+    lines.push('【运行配置】');
+    lines.push(`  数组长度: ${this.currentArray.length}`);
+    lines.push(`  数据分布: ${DISTRIBUTION_LABELS[this.distribution]}`);
+    if (this.isStabilityMode) {
+      lines.push(`  模式: 稳定性演示模式`);
+    }
+    lines.push(`  运行模式: ${this.isDualMode ? '双算法对比模式' : '单算法模式'}`);
+    lines.push('');
+
+    const pushAlgoReport = (
+      label: string,
+      algoId: string,
+      stepArr: SortStep[],
+      ratioFn: () => string,
+    ) => {
+      const info = this.getAlgorithmInfo(algoId);
+      if (!info || stepArr.length === 0) return;
+      const lastStep = stepArr[stepArr.length - 1];
+      lines.push(`【${label}】`);
+      lines.push(`  算法名称: ${info.nameCn} (${info.name})`);
+      lines.push(`  总比较次数: ${lastStep.comparisons}`);
+      lines.push(`  总交换次数: ${lastStep.swaps}`);
+      lines.push(`  执行总步数: ${Math.max(0, stepArr.length - 1)}`);
+      lines.push(`  最好时间复杂度: ${info.bestTime}`);
+      lines.push(`  平均时间复杂度: ${info.avgTime}`);
+      lines.push(`  最坏时间复杂度: ${info.worstTime}`);
+      lines.push(`  空间复杂度: ${info.space}`);
+      lines.push(`  稳定性: ${info.stable ? '稳定' : '不稳定'}`);
+      const ratio = ratioFn();
+      if (ratio) {
+        lines.push(`  与理论复杂度比值: ${ratio}`);
+      }
+      lines.push('');
+    };
+
+    pushAlgoReport('主算法', this.selectedAlgorithmId, this.steps, () => this.actualToTheoreticalRatio);
+    if (this.isDualMode) {
+      pushAlgoReport('对比算法', this.secondAlgorithmId, this.secondSteps, () => this.secondActualToTheoreticalRatio);
+    }
+
+    lines.push('========================================');
+    lines.push('报告由 排序算法可视化工具 自动生成');
+    lines.push('========================================');
+
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ts = now.getTime();
+    a.download = `sort-report-${ts}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 100);
   }
 
   private startRenderLoop(): void {
@@ -264,11 +507,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   stepForward(): void {
+    let shouldSaveHistory = false;
     if (this.currentStepIndex < this.totalSteps) {
       this.currentStepIndex++;
     }
     if (!this.firstIsComplete && this.currentStep.type === 'done') {
       this.firstIsComplete = true;
+      if (!this.isDualMode) {
+        shouldSaveHistory = true;
+      }
       if (this.isStabilityMode) {
         this.checkStability();
       }
@@ -282,9 +529,15 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     this.renderAll();
     if (this.isDualMode && this.firstIsComplete && this.secondIsComplete) {
       this.pause();
+      if (!this.isStabilityMode) {
+        shouldSaveHistory = true;
+      }
     }
     if (!this.isDualMode && this.firstIsComplete) {
       this.pause();
+    }
+    if (shouldSaveHistory && !this.isStabilityMode) {
+      this.saveHistoryRecord();
     }
   }
 
@@ -425,29 +678,41 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     const maxVal = Math.max(...array, 1);
     const barWidth = canvasWidth / arrayLength;
     const gap = 1;
+    const theme = this.currentTheme;
+    const swapBase = this.hexToRgb(theme.barSwapping);
     for (let i = 0; i < arrayLength; i++) {
       const barHeight = (array[i] / maxVal) * (canvasHeight - 30);
       const x = i * barWidth;
       const y = canvasHeight - barHeight;
+      let fillColor: string;
+      let shadowColor: string | null = null;
+      let shadowBlur = 0;
       if (vizState.swapping.includes(i)) {
         const flashIntensity = (Math.sin(this.swapAnimationFrame * 0.3) + 1) / 2;
-        const r = Math.floor(244 + (255 - 244) * flashIntensity);
-        const g = Math.floor(67 + (200 - 67) * flashIntensity);
-        const b = Math.floor(54 + (100 - 54) * flashIntensity);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-        ctx.shadowColor = '#F44336';
-        ctx.shadowBlur = 10 + 10 * flashIntensity;
+        if (swapBase) {
+          const r = Math.floor(swapBase.r + (255 - swapBase.r) * flashIntensity);
+          const g = Math.floor(swapBase.g + (200 - swapBase.g) * flashIntensity);
+          const b = Math.floor(swapBase.b + (100 - swapBase.b) * flashIntensity);
+          fillColor = `rgb(${r}, ${g}, ${b})`;
+        } else {
+          fillColor = theme.barSwapping;
+        }
+        shadowColor = theme.barSwapping;
+        shadowBlur = 10 + 10 * flashIntensity;
       } else if (vizState.comparing.includes(i)) {
-        ctx.fillStyle = '#FF9800';
-        ctx.shadowBlur = 0;
+        fillColor = theme.barComparing;
       } else if (vizState.sorted.has(i)) {
-        ctx.fillStyle = '#4CAF50';
-        ctx.shadowBlur = 0;
+        fillColor = theme.barSorted;
       } else if (vizState.pivot === i) {
-        ctx.fillStyle = '#9C27B0';
-        ctx.shadowBlur = 0;
+        fillColor = theme.barPivot;
       } else {
-        ctx.fillStyle = '#5B8DEF';
+        fillColor = theme.barDefault;
+      }
+      ctx.fillStyle = fillColor;
+      if (shadowColor) {
+        ctx.shadowColor = shadowColor;
+        ctx.shadowBlur = shadowBlur;
+      } else {
         ctx.shadowBlur = 0;
       }
       ctx.fillRect(x + gap / 2, y, barWidth - gap, barHeight);
@@ -474,18 +739,23 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
       if (arrayLength <= 30) {
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = theme.barTextColor;
         ctx.font = `${Math.min(10, barWidth - 2)}px sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(String(array[i]), x + barWidth / 2, y - 4);
       }
     }
     if (vizState.rangeStart >= 0 && vizState.rangeEnd >= 0 && vizState.rangeStart < arrayLength && vizState.rangeEnd < arrayLength) {
-      ctx.fillStyle = 'rgba(255, 235, 59, 0.15)';
+      ctx.fillStyle = theme.barRange;
       const rx = vizState.rangeStart * barWidth;
       const rw = (vizState.rangeEnd - vizState.rangeStart + 1) * barWidth;
       ctx.fillRect(rx, 0, rw, canvasHeight);
     }
+  }
+
+  private hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
   }
 
   renderHeapTree(canvas: ElementRef, steps: SortStep[], stepIndex: number): void {
@@ -515,7 +785,8 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       const y = level * verticalGap + 30;
       positions.push({ x, y });
     }
-    ctx.strokeStyle = '#999';
+    const theme = this.currentTheme;
+    ctx.strokeStyle = theme.chartAxisColor;
     ctx.lineWidth = 1;
     for (let i = 0; i < n; i++) {
       const left = 2 * i + 1;
@@ -533,23 +804,28 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         ctx.stroke();
       }
     }
+    const swapBase = this.hexToRgb(theme.barSwapping);
     for (let i = 0; i < n; i++) {
-      let fillColor = '#5B8DEF';
+      let fillColor = theme.barDefault;
       ctx.shadowBlur = 0;
       if (vizState.swapping.includes(i)) {
         const flashIntensity = (Math.sin(this.swapAnimationFrame * 0.3) + 1) / 2;
-        const r = Math.floor(244 + (255 - 244) * flashIntensity);
-        const g = Math.floor(67 + (200 - 67) * flashIntensity);
-        const b = Math.floor(54 + (100 - 54) * flashIntensity);
-        fillColor = `rgb(${r}, ${g}, ${b})`;
-        ctx.shadowColor = '#F44336';
+        if (swapBase) {
+          const r = Math.floor(swapBase.r + (255 - swapBase.r) * flashIntensity);
+          const g = Math.floor(swapBase.g + (200 - swapBase.g) * flashIntensity);
+          const b = Math.floor(swapBase.b + (100 - swapBase.b) * flashIntensity);
+          fillColor = `rgb(${r}, ${g}, ${b})`;
+        } else {
+          fillColor = theme.barSwapping;
+        }
+        ctx.shadowColor = theme.barSwapping;
         ctx.shadowBlur = 10 + 10 * flashIntensity;
       } else if (vizState.comparing.includes(i)) {
-        fillColor = '#FF9800';
+        fillColor = theme.barComparing;
       } else if (vizState.sorted.has(i)) {
-        fillColor = '#4CAF50';
+        fillColor = theme.barSorted;
       } else if (vizState.pivot === i) {
-        fillColor = '#9C27B0';
+        fillColor = theme.barPivot;
       }
       ctx.fillStyle = fillColor;
       ctx.beginPath();
@@ -573,6 +849,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     el.width = canvasWidth;
     el.height = canvasHeight;
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    const theme = this.currentTheme;
     const padding = { top: 30, right: 30, bottom: 50, left: 60 };
     const chartWidth = canvasWidth - padding.left - padding.right;
     const chartHeight = canvasHeight - padding.top - padding.bottom;
@@ -602,7 +879,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (maxY === 0) maxY = 100;
     maxY = Math.ceil(maxY * 1.1);
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = theme.chartAxisColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(padding.left, padding.top);
@@ -610,26 +887,26 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     ctx.lineTo(canvasWidth - padding.right, canvasHeight - padding.bottom);
     ctx.stroke();
     const yTicks = 5;
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = theme.chartAxisColor;
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'right';
     for (let i = 0; i <= yTicks; i++) {
       const val = Math.round((maxY / yTicks) * i);
       const y = canvasHeight - padding.bottom - (i / yTicks) * chartHeight;
       ctx.fillText(String(val), padding.left - 8, y + 3);
-      ctx.strokeStyle = '#E0E0E0';
+      ctx.strokeStyle = theme.chartGridColor;
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
       ctx.lineTo(canvasWidth - padding.right, y);
       ctx.stroke();
     }
     ctx.textAlign = 'center';
-    ctx.strokeStyle = '#333';
+    ctx.strokeStyle = theme.chartAxisColor;
     for (let i = 0; i < xValues.length; i++) {
       const x = padding.left + (i / (xValues.length - 1)) * chartWidth;
       ctx.fillText(String(xValues[i]), x, canvasHeight - padding.bottom + 18);
     }
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = theme.chartAxisColor;
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('n (数组长度)', padding.left + chartWidth / 2, canvasHeight - 5);
@@ -668,7 +945,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
       colorIdx++;
       ctx.fillStyle = color;
       ctx.fillRect(legendX, legendY, 12, 12);
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = theme.chartAxisColor;
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(info?.nameCn ?? algId, legendX + 16, legendY + 10);

@@ -60,6 +60,196 @@ export interface SortState {
 
 export type DataDistribution = 'random' | 'nearly-sorted' | 'reversed' | 'duplicates' | 'custom';
 
+export type ThemeId = 'dark' | 'light' | 'high-contrast';
+
+export interface ThemeColors {
+  id: ThemeId;
+  name: string;
+  appBg: string;
+  appColor: string;
+  panelBg: string;
+  panelHeaderBg: string;
+  buttonBg: string;
+  buttonActiveBg: string;
+  buttonColor: string;
+  buttonActiveColor: string;
+  inputBg: string;
+  inputColor: string;
+  inputBorder: string;
+  tableHeaderBg: string;
+  tableHeaderColor: string;
+  tableBorder: string;
+  tableActiveBg: string;
+  scrollbarTrack: string;
+  scrollbarThumb: string;
+  chartBg: string;
+  chartAxisColor: string;
+  chartGridColor: string;
+  barDefault: string;
+  barComparing: string;
+  barSwapping: string;
+  barSorted: string;
+  barPivot: string;
+  barRange: string;
+  highlightColor: string;
+  accentColor: string;
+  successColor: string;
+  warningColor: string;
+  dangerColor: string;
+  textPrimary: string;
+  textSecondary: string;
+  labelColor: string;
+  barTextColor: string;
+}
+
+export const THEMES: Record<ThemeId, ThemeColors> = {
+  dark: {
+    id: 'dark',
+    name: '深色模式',
+    appBg: '#1a1a2e',
+    appColor: '#e0e0e0',
+    panelBg: '#16213e',
+    panelHeaderBg: '#0f3460',
+    buttonBg: '#0f3460',
+    buttonActiveBg: '#5B8DEF',
+    buttonColor: '#e0e0e0',
+    buttonActiveColor: '#ffffff',
+    inputBg: '#0f3460',
+    inputColor: '#ffffff',
+    inputBorder: '#333333',
+    tableHeaderBg: '#0f3460',
+    tableHeaderColor: '#5B8DEF',
+    tableBorder: '#333333',
+    tableActiveBg: '#5B8DEF22',
+    scrollbarTrack: '#1a1a2e',
+    scrollbarThumb: '#333333',
+    chartBg: '#0f3460',
+    chartAxisColor: '#333333',
+    chartGridColor: '#E0E0E0',
+    barDefault: '#5B8DEF',
+    barComparing: '#FF9800',
+    barSwapping: '#F44336',
+    barSorted: '#4CAF50',
+    barPivot: '#9C27B0',
+    barRange: 'rgba(255, 235, 59, 0.15)',
+    highlightColor: '#5B8DEF33',
+    accentColor: '#5B8DEF',
+    successColor: '#4CAF50',
+    warningColor: '#FF9800',
+    dangerColor: '#F44336',
+    textPrimary: '#ffffff',
+    textSecondary: '#e0e0e0',
+    labelColor: '#888888',
+    barTextColor: '#333333',
+  },
+  light: {
+    id: 'light',
+    name: '浅色模式',
+    appBg: '#f5f7fa',
+    appColor: '#2c3e50',
+    panelBg: '#ffffff',
+    panelHeaderBg: '#e8ecf1',
+    buttonBg: '#e8ecf1',
+    buttonActiveBg: '#4A90D9',
+    buttonColor: '#2c3e50',
+    buttonActiveColor: '#ffffff',
+    inputBg: '#ffffff',
+    inputColor: '#2c3e50',
+    inputBorder: '#cbd5e0',
+    tableHeaderBg: '#e8ecf1',
+    tableHeaderColor: '#4A90D9',
+    tableBorder: '#e2e8f0',
+    tableActiveBg: '#4A90D922',
+    scrollbarTrack: '#e8ecf1',
+    scrollbarThumb: '#a0aec0',
+    chartBg: '#f0f4f8',
+    chartAxisColor: '#2c3e50',
+    chartGridColor: '#e2e8f0',
+    barDefault: '#6BB6FF',
+    barComparing: '#FFB74D',
+    barSwapping: '#EF5350',
+    barSorted: '#66BB6A',
+    barPivot: '#AB47BC',
+    barRange: 'rgba(255, 193, 7, 0.20)',
+    highlightColor: '#4A90D922',
+    accentColor: '#4A90D9',
+    successColor: '#43A047',
+    warningColor: '#FB8C00',
+    dangerColor: '#E53935',
+    textPrimary: '#1a202c',
+    textSecondary: '#4a5568',
+    labelColor: '#718096',
+    barTextColor: '#555555',
+  },
+  'high-contrast': {
+    id: 'high-contrast',
+    name: '高对比度模式',
+    appBg: '#000000',
+    appColor: '#ffffff',
+    panelBg: '#0a0a0a',
+    panelHeaderBg: '#1a1a1a',
+    buttonBg: '#1a1a1a',
+    buttonActiveBg: '#00FF88',
+    buttonColor: '#ffffff',
+    buttonActiveColor: '#000000',
+    inputBg: '#1a1a1a',
+    inputColor: '#00FF88',
+    inputBorder: '#00FF88',
+    tableHeaderBg: '#1a1a1a',
+    tableHeaderColor: '#00FF88',
+    tableBorder: '#00FF88',
+    tableActiveBg: '#00FF8833',
+    scrollbarTrack: '#000000',
+    scrollbarThumb: '#00FF88',
+    chartBg: '#1a1a1a',
+    chartAxisColor: '#00FF88',
+    chartGridColor: '#333333',
+    barDefault: '#00BFFF',
+    barComparing: '#FFD700',
+    barSwapping: '#FF0066',
+    barSorted: '#00FF88',
+    barPivot: '#FF00FF',
+    barRange: 'rgba(255, 215, 0, 0.25)',
+    highlightColor: '#00FF8844',
+    accentColor: '#00FF88',
+    successColor: '#00FF88',
+    warningColor: '#FFD700',
+    dangerColor: '#FF0066',
+    textPrimary: '#ffffff',
+    textSecondary: '#e0e0e0',
+    labelColor: '#aaaaaa',
+    barTextColor: '#ffffff',
+  },
+};
+
+export interface HistoryRecord {
+  id: string;
+  timestamp: number;
+  algorithmId: string;
+  algorithmNameCn: string;
+  arrayLength: number;
+  distribution: DataDistribution;
+  distributionLabel: string;
+  totalComparisons: number;
+  totalSwaps: number;
+  totalSteps: number;
+  originalArray: number[];
+  isDualMode: boolean;
+  secondAlgorithmId?: string;
+  secondAlgorithmNameCn?: string;
+  secondTotalComparisons?: number;
+  secondTotalSwaps?: number;
+  secondTotalSteps?: number;
+}
+
+export const DISTRIBUTION_LABELS: Record<DataDistribution, string> = {
+  random: '完全随机',
+  'nearly-sorted': '近乎有序',
+  reversed: '完全逆序',
+  duplicates: '大量重复值',
+  custom: '自定义输入',
+};
+
 export const ALGORITHMS: AlgorithmInfo[] = [
   {
     id: 'bubble',

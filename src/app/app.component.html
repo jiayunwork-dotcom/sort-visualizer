@@ -1,10 +1,85 @@
-<div class="app-container">
+<div class="app-container" [class.theme-dark]="currentThemeId === 'dark'" [class.theme-light]="currentThemeId === 'light'" [class.theme-high-contrast]="currentThemeId === 'high-contrast'">
   <!-- Top Header Bar -->
   <header class="header">
-    <h1>排序算法交互式可视化教学工具</h1>
-    <div class="mode-toggle">
-      <button [class.active]="!isDualMode" (click)="setDualMode(false)">单算法模式</button>
-      <button [class.active]="isDualMode" (click)="setDualMode(true)">双算法对比</button>
+    <div class="header-left">
+      <h1>排序算法交互式可视化教学工具</h1>
+    </div>
+    <div class="header-right">
+      <!-- Theme Selector -->
+      <div class="theme-selector">
+        <label class="theme-label">🎨 主题</label>
+        <div class="theme-buttons">
+          <button *ngFor="let tId of themes"
+                  [class.active]="currentThemeId === tId"
+                  (click)="switchTheme(tId)"
+                  class="theme-btn"
+                  [title]="THEMES[tId].name">
+            <span class="theme-dot" [style.background-color]="THEMES[tId].accentColor"></span>
+            <span class="theme-name">{{THEMES[tId].name}}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- History Panel Toggle -->
+      <div class="history-trigger-wrap">
+        <button class="history-trigger-btn" (click)="isHistoryPanelOpen = !isHistoryPanelOpen"
+                [class.active]="isHistoryPanelOpen">
+          📜 历史记录
+          <span class="history-badge" *ngIf="historyBadgeCount > 0">{{historyBadgeCount}}</span>
+        </button>
+
+        <!-- History Dropdown Panel -->
+        <div class="history-panel" *ngIf="isHistoryPanelOpen" (click)="$event.stopPropagation()">
+          <div class="history-panel-header">
+            <span class="history-panel-title">执行历史 (最近{{HISTORY_MAX}}条)</span>
+            <button class="history-clear-btn" *ngIf="historyRecords.length > 0" (click)="clearHistory()">
+              清空
+            </button>
+          </div>
+          <div class="history-list" *ngIf="historyRecords.length > 0">
+            <div *ngFor="let rec of historyRecords" class="history-item" (click)="restoreHistoryRecord(rec)">
+              <div class="history-item-main">
+                <div class="history-item-title">
+                  <span class="history-algo">{{rec.algorithmNameCn}}</span>
+                  <span *ngIf="rec.isDualMode" class="history-dual-vs">
+                    ⚔ {{rec.secondAlgorithmNameCn}}
+                  </span>
+                </div>
+                <div class="history-item-meta">
+                  <span>📐 {{rec.arrayLength}}项</span>
+                  <span>🎲 {{rec.distributionLabel}}</span>
+                  <span>⏱ {{formatHistoryTime(rec.timestamp)}}</span>
+                </div>
+                <div class="history-item-stats">
+                  <span>对比: <strong>{{rec.totalComparisons}}</strong></span>
+                  <span>交换: <strong>{{rec.totalSwaps}}</strong></span>
+                  <span>步数: <strong>{{rec.totalSteps}}</strong></span>
+                </div>
+                <div *ngIf="rec.isDualMode" class="history-item-second-stats">
+                  <div class="history-second-label">
+                    {{rec.secondAlgorithmNameCn}}:
+                  </div>
+                  <span>对比: <strong>{{rec.secondTotalComparisons}}</strong></span>
+                  <span>交换: <strong>{{rec.secondTotalSwaps}}</strong></span>
+                  <span>步数: <strong>{{rec.secondTotalSteps}}</strong></span>
+                </div>
+              </div>
+              <button class="history-item-delete"
+                      (click)="deleteHistoryRecord(rec.id, $event)"
+                      title="删除此记录">✕</button>
+            </div>
+          </div>
+          <div class="history-empty" *ngIf="historyRecords.length === 0">
+            <p>暂无历史记录</p>
+            <p class="history-empty-hint">完成一次算法执行后会自动保存</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="mode-toggle">
+        <button [class.active]="!isDualMode" (click)="setDualMode(false)">单算法模式</button>
+        <button [class.active]="isDualMode" (click)="setDualMode(true)">双算法对比</button>
+      </div>
     </div>
   </header>
 
@@ -146,7 +221,10 @@
 
   <!-- Complexity Panel -->
   <div class="complexity-panel">
-    <h3>📊 算法复杂度对比</h3>
+    <div class="complexity-header">
+      <h3>📊 算法复杂度对比</h3>
+      <button class="export-report-btn" (click)="exportReport()">📥 导出报告</button>
+    </div>
     <div class="complexity-table-wrapper">
       <table class="complexity-table">
         <thead>
@@ -169,7 +247,8 @@
             <td>{{algo.space}}</td>
             <td [class.stable]="algo.stable" [class.unstable]="!algo.stable">{{algo.stable ? '✓' : '✗'}}</td>
             <td *ngIf="isRunning && (algo.id === selectedAlgorithmId || (isDualMode && algo.id === secondAlgorithmId))">
-              {{actualToTheoreticalRatio}}
+              <span *ngIf="algo.id === selectedAlgorithmId">{{actualToTheoreticalRatio}}</span>
+              <span *ngIf="isDualMode && algo.id === secondAlgorithmId">{{secondActualToTheoreticalRatio}}</span>
             </td>
           </tr>
         </tbody>
